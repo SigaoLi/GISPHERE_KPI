@@ -160,12 +160,27 @@ def prepare_sheet_data(df):
     if df.empty:
         return df
     
-    # 处理 Deadline：支持日期格式和 "Soon"
+    # 处理 Deadline：支持日期格式、Excel序列号和 "Soon"
     def format_deadline(val):
         if pd.isna(val) or val == '':
             return ''
         if str(val).strip().lower() == 'soon':
             return 'Soon'
+        
+        # 尝试检测 Excel 序列日期（数字格式，通常在 1-100000 范围内）
+        try:
+            # 先尝试转换为数字
+            num_val = float(str(val).strip())
+            # 如果是合理的 Excel 日期序列号（1900-01-01 到未来几十年）
+            if 1 <= num_val <= 100000:
+                # Excel 日期从 1900-01-01 开始计数
+                # pandas 的 to_datetime 可以处理 Excel 序列号
+                excel_date = pd.Timestamp('1899-12-30') + pd.Timedelta(days=num_val)
+                return excel_date.strftime('%Y-%m-%d')
+        except (ValueError, TypeError):
+            pass
+        
+        # 尝试标准日期解析
         try:
             return pd.to_datetime(val).strftime('%Y-%m-%d')
         except:
@@ -213,13 +228,25 @@ def merge_data():
         # 转换日期
         merged_df['Date'] = pd.to_datetime(merged_df['Date'])
         
-        # 处理 Deadline：将 "Soon" 按照 30 天计算
+        # 处理 Deadline：将 "Soon" 按照 30 天计算，支持 Excel 序列号
         def parse_deadline(val, entry_date):
             if pd.isna(val) or val == '':
                 return pd.NaT
             if str(val).strip().lower() == 'soon':
                 # Soon 按照入库日期 + 30 天计算
                 return entry_date + timedelta(days=30)
+            
+            # 尝试检测 Excel 序列日期
+            try:
+                num_val = float(str(val).strip())
+                if 1 <= num_val <= 100000:
+                    # Excel 日期从 1899-12-30 开始计数
+                    excel_date = pd.Timestamp('1899-12-30') + pd.Timedelta(days=num_val)
+                    return excel_date
+            except (ValueError, TypeError):
+                pass
+            
+            # 标准日期解析
             try:
                 return pd.to_datetime(val)
             except:
